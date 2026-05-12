@@ -180,9 +180,9 @@ mum(uint64_t *a, uint64_t *b)
 	hl = ah * bl;
 	hh = ah * bh;
 
-	m = lh + hl;
-	rl = ll + (m << 32);
-	rh = hh + (m >> 32) + ((uint64_t)(m < lh) << 32) + (rl < ll);
+	m = (ll >> 32) + lh + (hl & 0xffffffff);
+	rl = ll & 0xffffffff | m << 32;
+	rh = hh + (m >> 32) + (hl >> 32);
 	*a = rl;
 	*b = rh;
 #endif
