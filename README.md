@@ -26,7 +26,7 @@ definitions for your platform.
 
 Spawning subprocesses is done using `posix_spawn`. If this interface
 isn't available on your operating system, define `NO_POSIX_SPAWN`
-in your `CFLAGS` to use `fork` and `spawn` instead.
+in your `CFLAGS` to use `fork` and `exec` instead.
 
 samurai uses `clock_gettime`, which requires `-l rt` when linking
 on some operating systems to ensure that this interface is made
