@@ -3,7 +3,7 @@ name: build
 on: [push]
 
 jobs:
-  build:
+  build-posix:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
@@ -15,3 +15,12 @@ jobs:
     - uses: actions/checkout@v1
     - name: make
       run: make ${{ matrix.flags }}
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: ilammy/msvc-dev-cmd@v1
+    - name: nmake
+      shell: cmd
+      run: nmake -f Makefile.nmake
