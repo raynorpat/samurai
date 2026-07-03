@@ -1,7 +1,9 @@
 #include <ctype.h>
 #include <errno.h>
+#ifndef _WIN32
 #include <inttypes.h>
 #include <stdbool.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,11 +73,12 @@ depswrite(const void *p, size_t n, size_t m)
 static bool
 recordid(struct node *n)
 {
+	static const char zeros[4];
 	uint32_t sz, chk;
 
 	if (n->id != -1)
 		return false;
-	if (entrieslen == INT32_MAX)
+	if (entrieslen == (size_t)0x7fffffff)
 		fatal("too many nodes");
 	n->id = entrieslen++;
 	sz = (n->path->n + 7) & ~3;
@@ -83,7 +86,7 @@ recordid(struct node *n)
 		fatal("ID record too large");
 	depswrite(&sz, 4, 1);
 	depswrite(n->path->s, 1, n->path->n);
-	depswrite((char[4]){0}, 1, sz - n->path->n - 4);
+	depswrite(zeros, 1, sz - n->path->n - 4);
 	chk = ~n->id;
 	depswrite(&chk, 4, 1);
 
@@ -132,7 +135,7 @@ depsinit(const char *builddir)
 	buf = xmalloc(cap);
 	if (builddir)
 		xasprintf(&depspath, "%s/%s", builddir, depsname);
-	depsfile = fopen(depspath, "r+");
+	depsfile = fopen(depspath, "r+b");
 	if (!depsfile) {
 		if (errno != ENOENT)
 			fatal("open %s:", depspath);
@@ -204,6 +207,7 @@ depsinit(const char *builddir)
 				entry->deps.node[i] = entries[id].node;
 			}
 		} else {
+			struct entry ent;
 			if (sz <= 4) {
 				warn("invalid size, must be greater than 4: %" PRIu32, sz);
 				goto rewrite;
@@ -212,7 +216,7 @@ depsinit(const char *builddir)
 				warn("corrupt deps log, bad checksum");
 				goto rewrite;
 			}
-			if (entrieslen == INT32_MAX) {
+			if (entrieslen == (size_t)0x7fffffff) {
 				warn("too many nodes in deps log");
 				goto rewrite;
 			}
@@ -229,7 +233,9 @@ depsinit(const char *builddir)
 				entries = xreallocarray(entries, entriescap, sizeof(entries[0]));
 			}
 			n->id = entrieslen;
-			entries[entrieslen++] = (struct entry){.node = n};
+			memset(&ent, 0, sizeof ent);
+			ent.node = n;
+			entries[entrieslen++] = ent;
 		}
 	}
 	if (ferror(depsfile)) {
@@ -237,6 +243,10 @@ depsinit(const char *builddir)
 		goto rewrite;
 	}
 	if (nrecord <= 1000 || nrecord < 3 * entrieslen) {
+		fclose(depsfile);
+		depsfile = fopen(depspath, "ab");
+		if (!depsfile)
+			fatal("open %s:", depspath);
 		if (builddir)
 			free(depspath);
 		free(buf);
@@ -249,7 +259,7 @@ rewrite:
 		fclose(depsfile);
 	if (builddir)
 		xasprintf(&depstmppath, "%s/%s", builddir, depstmpname);
-	depsfile = fopen(depstmppath, "w");
+	depsfile = fopen(depstmppath, "wb");
 	if (!depsfile)
 		fatal("open %s:", depstmppath);
 	depswrite(depsheader, 1, sizeof(depsheader) - 1);
@@ -278,8 +288,15 @@ rewrite:
 	fflush(depsfile);
 	if (ferror(depsfile))
 		fatal("deps log write failed");
+	fclose(depsfile);
+#ifdef _WIN32
+	remove(depspath);  /* Win32 rename() can't replace an existing file */
+#endif
 	if (rename(depstmppath, depspath) < 0)
 		fatal("deps log rename:");
+	depsfile = fopen(depspath, "ab");
+	if (!depsfile)
+		fatal("open %s:", depspath);
 	if (builddir) {
 		free(depstmppath);
 		free(depspath);

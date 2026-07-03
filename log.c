@@ -1,5 +1,7 @@
 #include <errno.h>
+#ifndef _WIN32
 #include <inttypes.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,6 +112,11 @@ loginit(const char *builddir)
 		goto rewrite;
 	}
 	if (nline <= 100 || nline <= 3 * nentry) {
+		fclose(logfile);
+		logfile = fopen(logpath, "a");
+		if (!logfile)
+			fatal("open %s:", logpath);
+		setvbuf(logfile, NULL, _IOLBF, 0);
 		if (builddir)
 			free(logpath);
 		return;
@@ -138,8 +145,16 @@ rewrite:
 	fflush(logfile);
 	if (ferror(logfile))
 		fatal("build log write failed");
+	fclose(logfile);
+#ifdef _WIN32
+	remove(logpath);  /* Win32 rename() can't replace an existing file */
+#endif
 	if (rename(logtmppath, logpath) < 0)
 		fatal("build log rename:");
+	logfile = fopen(logpath, "a");
+	if (!logfile)
+		fatal("open %s:", logpath);
+	setvbuf(logfile, NULL, _IOLBF, 0);
 	if (builddir) {
 		free(logpath);
 		free(logtmppath);
@@ -158,5 +173,8 @@ logclose(void)
 void
 logrecord(struct node *n)
 {
-	fprintf(logfile, "0\t0\t%" PRId64 "\t%s\t%" PRIx64 "\n", n->logmtime, n->path->s, n->hash);
+	char mbuf[21], hbuf[17];
+
+	fprintf(logfile, "0\t0\t%s\t%s\t%s\n",
+	        i64dec(mbuf, n->logmtime), n->path->s, u64hex(hbuf, n->hash));
 }

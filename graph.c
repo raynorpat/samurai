@@ -1,5 +1,7 @@
 #include <ctype.h>
+#ifndef _WIN32
 #include <stdbool.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "env.h"

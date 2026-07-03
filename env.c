@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #include <stdbool.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "env.h"
@@ -14,8 +16,8 @@ struct environment {
 };
 
 struct environment *rootenv;
-struct rule phonyrule = {.name = "phony"};
-struct pool consolepool = {.name = "console", .maxjobs = 1};
+struct rule phonyrule = {"phony"};
+struct pool consolepool = {"console", 0, 1};
 static struct treenode *pools;
 static struct environment *allenvs;
 

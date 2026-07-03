@@ -1,16 +1,23 @@
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include <errno.h>
+#ifndef _WIN32
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
 #include <time.h>
-#include <unistd.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "build.h"
 #include "deps.h"
 #include "env.h"
@@ -24,17 +31,24 @@ struct job {
 	struct edge *edge;
 	struct buffer buf;
 	size_t next;
+#ifdef _WIN32
+	HANDLE proc;
+	char tmppath[MAX_PATH];
+#else
 	pid_t pid;
 	int fd;
+#endif
 	bool failed;
 };
 
-struct buildoptions buildopts = {.maxfail = 1};
+struct buildoptions buildopts = {0, 1};
 static struct edge *work;
 static size_t nstarted, nfinished, ntotal;
 static bool consoleused;
 static struct timespec starttime;
+#ifndef _WIN32
 static int sigfd[2];
+#endif
 
 void
 buildreset(void)
@@ -57,6 +71,7 @@ static bool
 isdirty(struct node *n, struct node *newest, bool generator, bool restat)
 {
 	struct edge *e;
+	char b1[21], b2[21];
 
 	e = n->gen;
 	if (e->rule == &phonyrule) {
@@ -78,8 +93,8 @@ isdirty(struct node *n, struct node *newest, bool generator, bool restat)
 	}
 	if (isnewer(newest, n) && (!restat || n->logmtime == MTIME_MISSING)) {
 		if (buildopts.explain) {
-			warn("explain %s: older than input '%s': %" PRId64 " vs %" PRId64,
-			     n->path->s, newest->path->s, n->mtime, newest->mtime);
+			warn("explain %s: older than input '%s': %s vs %s",
+			     n->path->s, newest->path->s, i64dec(b1, n->mtime), i64dec(b2, newest->mtime));
 		}
 		return true;
 	}
@@ -91,8 +106,8 @@ isdirty(struct node *n, struct node *newest, bool generator, bool restat)
 		}
 	} else if (newest && n->logmtime < newest->mtime) {
 		if (buildopts.explain) {
-			warn("explain %s: recorded mtime is older than input '%s': %" PRId64 " vs %" PRId64,
-			     n->path->s, newest->path->s, n->logmtime, newest->mtime);
+			warn("explain %s: recorded mtime is older than input '%s': %s vs %s",
+			     n->path->s, newest->path->s, i64dec(b1, n->logmtime), i64dec(b2, newest->mtime));
 		}
 		return true;
 	}
@@ -166,8 +181,8 @@ buildadd(struct node *n)
 			++e->nblock;
 	}
 	/* all outputs are dirty if any are older than the newest input */
-	generator = edgevar(e, "generator", true);
-	restat = edgevar(e, "restat", true);
+	generator = edgevar(e, "generator", true) != NULL;
+	restat = edgevar(e, "restat", true) != NULL;
 	for (i = 0; i < e->nout && !(e->flags & FLAG_DIRTY_OUT); ++i) {
 		n = e->out[i];
 		if (isdirty(n, newest, generator, restat)) {
@@ -218,22 +233,22 @@ formatstatus(char *buf, size_t len)
 		n = 0;
 		switch (*fmt) {
 		case 's':
-			n = snprintf(buf, len, "%zu", nstarted);
+			n = snprintf(buf, len, "%lu", (unsigned long)nstarted);
 			break;
 		case 'f':
-			n = snprintf(buf, len, "%zu", nfinished);
+			n = snprintf(buf, len, "%lu", (unsigned long)nfinished);
 			break;
 		case 't':
-			n = snprintf(buf, len, "%zu", ntotal);
+			n = snprintf(buf, len, "%lu", (unsigned long)ntotal);
 			break;
 		case 'r':
-			n = snprintf(buf, len, "%zu", nstarted - nfinished);
+			n = snprintf(buf, len, "%lu", (unsigned long)(nstarted - nfinished));
 			break;
 		case 'u':
-			n = snprintf(buf, len, "%zu", ntotal - nstarted);
+			n = snprintf(buf, len, "%lu", (unsigned long)(ntotal - nstarted));
 			break;
 		case 'p':
-			n = snprintf(buf, len, "%3zu%%", 100 * nfinished / ntotal);
+			n = snprintf(buf, len, "%3lu%%", (unsigned long)(100 * nfinished / ntotal));
 			break;
 		case 'o':
 			if (clock_gettime(CLOCK_MONOTONIC, &endtime) != 0) {
@@ -280,6 +295,7 @@ printstatus(struct edge *e, struct string *cmd)
 	puts(description->s);
 }
 
+#ifndef _WIN32
 static int
 jobstart(struct job *j, struct edge *e)
 {
@@ -348,6 +364,7 @@ err1:
 err0:
 	return -1;
 }
+#endif /* !_WIN32 */
 
 static void
 nodedone(struct node *n, bool prune)
@@ -404,7 +421,7 @@ edgedone(struct edge *e)
 	bool restat;
 	int64_t old;
 
-	restat = edgevar(e, "restat", true);
+	restat = edgevar(e, "restat", true) != NULL;
 	for (i = 0; i < e->nout; ++i) {
 		n = e->out[i];
 		old = n->mtime;
@@ -424,6 +441,7 @@ edgedone(struct edge *e)
 	}
 }
 
+#ifndef _WIN32
 static void
 jobdone(struct job *j)
 {
@@ -664,3 +682,306 @@ build(void)
 	}
 	ntotal = 0;  /* reset in case we just rebuilt the manifest */
 }
+#endif /* !_WIN32 */
+
+#ifdef _WIN32
+
+static HANDLE ctrlcevent;
+
+static BOOL WINAPI
+ctrlhandler(DWORD type)
+{
+	(void)type;
+	SetEvent(ctrlcevent);
+	return TRUE;
+}
+
+static void
+setctrlhandler(void)
+{
+	ctrlcevent = CreateEventA(NULL, TRUE, FALSE, NULL);  /* manual reset */
+	if (!ctrlcevent)
+		fatal("CreateEvent:");
+	SetConsoleCtrlHandler(ctrlhandler, TRUE);
+}
+
+static int
+jobstart(struct job *j, struct edge *e)
+{
+	size_t i;
+	struct node *n;
+	struct string *rspfile, *content;
+	SECURITY_ATTRIBUTES sa;
+	HANDLE outfile;
+	char tmpdir[MAX_PATH];
+
+	++nstarted;
+	for (i = 0; i < e->nout; ++i) {
+		n = e->out[i];
+		if (n->mtime == MTIME_MISSING) {
+			if (osmkdirs(n->path, true) < 0)
+				goto err0;
+		}
+	}
+	rspfile = edgevar(e, "rspfile", false);
+	if (rspfile) {
+		content = edgevar(e, "rspfile_content", true);
+		if (writefile(rspfile->s, content) < 0)
+			goto err0;
+	}
+
+	j->edge = e;
+	j->cmd = edgevar(e, "command", true);
+	j->proc = NULL;
+	j->tmppath[0] = '\0';
+
+	if (!consoleused)
+		printstatus(e, j->cmd);
+
+	outfile = INVALID_HANDLE_VALUE;
+	if (e->pool != &consolepool) {
+		if (!GetTempPathA(sizeof tmpdir, tmpdir) ||
+		    !GetTempFileNameA(tmpdir, "samu", 0, j->tmppath)) {
+			warn("GetTempFileName:");
+			j->tmppath[0] = '\0';
+			goto err1;
+		}
+		sa.nLength = sizeof sa;
+		sa.lpSecurityDescriptor = NULL;
+		sa.bInheritHandle = TRUE;
+		outfile = CreateFileA(j->tmppath, GENERIC_WRITE,
+		    FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, CREATE_ALWAYS,
+		    FILE_ATTRIBUTE_TEMPORARY, NULL);
+		if (outfile == INVALID_HANDLE_VALUE) {
+			warn("CreateFile %s:", j->tmppath);
+			goto err1;
+		}
+	}
+
+	j->proc = osspawn(j->cmd->s, (void *)outfile);
+	if (outfile != INVALID_HANDLE_VALUE)
+		CloseHandle(outfile);
+	if (!j->proc)
+		goto err1;
+
+	j->failed = false;
+	if (e->pool == &consolepool)
+		consoleused = true;
+
+	return 0;
+
+err1:
+	if (j->tmppath[0]) {
+		DeleteFileA(j->tmppath);
+		j->tmppath[0] = '\0';
+	}
+	if (rspfile && !buildopts.keeprsp)
+		remove(rspfile->s);
+err0:
+	return -1;
+}
+
+static void
+readtmp(struct job *j)
+{
+	FILE *f;
+	size_t got, newcap;
+	char *newdata;
+
+	f = fopen(j->tmppath, "rb");
+	if (!f)
+		return;
+	for (;;) {
+		if (j->buf.cap - j->buf.len < BUFSIZ) {
+			newcap = j->buf.cap + BUFSIZ;
+			newdata = realloc(j->buf.data, newcap);
+			if (!newdata) {
+				warn("realloc:");
+				break;
+			}
+			j->buf.cap = newcap;
+			j->buf.data = newdata;
+		}
+		got = fread(j->buf.data + j->buf.len, 1,
+		    j->buf.cap - j->buf.len, f);
+		if (got == 0)
+			break;
+		j->buf.len += got;
+	}
+	fclose(f);
+}
+
+static void
+jobdone(struct job *j)
+{
+	DWORD status = 1;
+	struct edge *e, *new;
+	struct pool *p;
+
+	++nfinished;
+	if (!GetExitCodeProcess(j->proc, &status)) {
+		warn("GetExitCodeProcess:");
+		j->failed = true;
+	} else if (status != 0) {
+		warn("job failed with status %lu: %s", status, j->cmd->s);
+		j->failed = true;
+	}
+	CloseHandle(j->proc);
+	j->proc = NULL;
+
+	if (j->tmppath[0]) {
+		readtmp(j);
+		DeleteFileA(j->tmppath);
+		j->tmppath[0] = '\0';
+	}
+	if (j->buf.len && (!consoleused || j->failed))
+		fwrite(j->buf.data, 1, j->buf.len, stdout);
+	j->buf.len = 0;
+
+	e = j->edge;
+	if (e->pool) {
+		p = e->pool;
+		if (p == &consolepool)
+			consoleused = false;
+		if (p->work) {
+			new = p->work;
+			p->work = p->work->worknext;
+			new->worknext = work;
+			work = new;
+		} else {
+			--p->numjobs;
+		}
+	}
+	if (!j->failed)
+		edgedone(e);
+}
+
+/* returns a finished job's slot, or one of the sentinels below */
+#define WAIT_NONE  ((size_t)-1)
+#define WAIT_CTRLC ((size_t)-2)
+
+static size_t
+jobwait(struct job *jobs, size_t jobslen)
+{
+	HANDLE wset[MAXIMUM_WAIT_OBJECTS];
+	size_t map[MAXIMUM_WAIT_OBJECTS];
+	DWORD n, r;
+	size_t i;
+
+	/* non-blocking sweep first so >63 concurrent jobs can't starve */
+	for (i = 0; i < jobslen; ++i) {
+		if (jobs[i].proc &&
+		    WaitForSingleObject(jobs[i].proc, 0) == WAIT_OBJECT_0)
+			return i;
+	}
+	n = 0;
+	for (i = 0; i < jobslen && n < MAXIMUM_WAIT_OBJECTS - 1; ++i) {
+		if (jobs[i].proc) {
+			wset[n] = jobs[i].proc;
+			map[n] = i;
+			++n;
+		}
+	}
+	wset[n] = ctrlcevent;
+	r = WaitForMultipleObjects(n + 1, wset, FALSE, 5000);
+	if (r == WAIT_FAILED)
+		fatal("WaitForMultipleObjects:");
+	if (r == WAIT_TIMEOUT)
+		return WAIT_NONE;
+	r -= WAIT_OBJECT_0;
+	if (r == n)
+		return WAIT_CTRLC;
+	if (r < n)
+		return map[r];
+	return WAIT_NONE;
+}
+
+void
+build(void)
+{
+	struct job *jobs = NULL;
+	size_t i, next = 0, jobslen = 0;
+	size_t maxjobs = buildopts.maxjobs, numjobs = 0, numfail = 0;
+	struct edge *e;
+	size_t slot;
+
+	if (ntotal == 0) {
+		warn("nothing to do");
+		return;
+	}
+
+	setctrlhandler();
+	clock_gettime(CLOCK_MONOTONIC, &starttime);
+	formatstatus(NULL, 0);
+
+	nstarted = 0;
+	for (;;) {
+		while (work && numjobs < maxjobs && numfail < buildopts.maxfail) {
+			e = work;
+			work = work->worknext;
+			if (e->rule != &phonyrule && buildopts.dryrun) {
+				++nstarted;
+				printstatus(e, edgevar(e, "command", true));
+				++nfinished;
+			}
+			if (e->rule == &phonyrule || buildopts.dryrun) {
+				for (i = 0; i < e->nout; ++i)
+					nodedone(e->out[i], false);
+				continue;
+			}
+			if (next == jobslen) {
+				jobslen = jobslen ? jobslen * 2 : 8;
+				if (jobslen > buildopts.maxjobs)
+					jobslen = buildopts.maxjobs;
+				jobs = xreallocarray(jobs, jobslen, sizeof(jobs[0]));
+				for (i = next; i < jobslen; ++i) {
+					jobs[i].buf.data = NULL;
+					jobs[i].buf.len = 0;
+					jobs[i].buf.cap = 0;
+					jobs[i].next = i + 1;
+					jobs[i].proc = NULL;
+				}
+			}
+			if (jobstart(&jobs[next], e) < 0) {
+				warn("job failed to start");
+				++numfail;
+			} else {
+				next = jobs[next].next;
+				++numjobs;
+			}
+		}
+		if (numjobs == 0)
+			break;
+
+		slot = jobwait(jobs, jobslen);
+		if (slot == WAIT_CTRLC) {
+			for (i = 0; i < jobslen; ++i) {
+				if (jobs[i].proc)
+					TerminateProcess(jobs[i].proc, 1);
+			}
+			fatal("build interrupted");
+		}
+		if (slot == WAIT_NONE)
+			continue;
+		jobdone(&jobs[slot]);
+		--numjobs;
+		jobs[slot].next = next;
+		next = slot;
+		if (jobs[slot].failed)
+			++numfail;
+	}
+	for (i = 0; i < jobslen; ++i)
+		free(jobs[i].buf.data);
+	free(jobs);
+	if (numfail > 0) {
+		if (numfail < buildopts.maxfail)
+			fatal("cannot make progress due to previous errors");
+		else if (numfail > 1)
+			fatal("subcommands failed");
+		else
+			fatal("subcommand failed");
+	}
+	ntotal = 0;
+}
+
+#endif /* _WIN32 */

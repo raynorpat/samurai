@@ -1,7 +1,9 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <stdint.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include "util.h"
@@ -222,4 +224,51 @@ writefile(const char *name, struct string *s)
 	fclose(f);
 
 	return ret;
+}
+
+char *
+i64dec(char *buf, int64_t v)
+{
+	char tmp[20];
+	int i = 0;
+	int neg = 0;
+	uint64_t u;
+	char *p = buf;
+
+	if (v < 0) {
+		neg = 1;
+		u = (uint64_t)(-(v + 1)) + 1;  /* negate without INT64_MIN overflow */
+	} else {
+		u = (uint64_t)v;
+	}
+	do {
+		tmp[i++] = (char)('0' + (int)(u % 10));
+		u /= 10;
+	} while (u);
+	if (neg)
+		*p++ = '-';
+	while (i > 0)
+		*p++ = tmp[--i];
+	*p = '\0';
+
+	return buf;
+}
+
+char *
+u64hex(char *buf, uint64_t v)
+{
+	static const char hexdig[] = "0123456789abcdef";
+	char tmp[16];
+	int i = 0;
+	char *p = buf;
+
+	do {
+		tmp[i++] = hexdig[(int)(v & 0xf)];
+		v >>= 4;
+	} while (v);
+	while (i > 0)
+		*p++ = tmp[--i];
+	*p = '\0';
+
+	return buf;
 }

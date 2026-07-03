@@ -1,7 +1,9 @@
 #include <assert.h>
 #include <limits.h>
+#ifndef _WIN32
 #include <stdbool.h>
 #include <stdint.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
@@ -140,14 +142,14 @@ getle64(const void *p)
 	const unsigned char *b = p;
 	uint_least64_t v;
 
-	v = b[0] & 0xffull;
-	v |= (b[1] & 0xffull) << 8;
-	v |= (b[2] & 0xffull) << 16;
-	v |= (b[3] & 0xffull) << 24;
-	v |= (b[4] & 0xffull) << 32;
-	v |= (b[5] & 0xffull) << 40;
-	v |= (b[6] & 0xffull) << 48;
-	v |= (b[7] & 0xffull) << 56;
+	v = b[0] & UINT64_C(0xff);
+	v |= (b[1] & UINT64_C(0xff)) << 8;
+	v |= (b[2] & UINT64_C(0xff)) << 16;
+	v |= (b[3] & UINT64_C(0xff)) << 24;
+	v |= (b[4] & UINT64_C(0xff)) << 32;
+	v |= (b[5] & UINT64_C(0xff)) << 40;
+	v |= (b[6] & UINT64_C(0xff)) << 48;
+	v |= (b[7] & UINT64_C(0xff)) << 56;
 	return v;
 }
 
@@ -199,9 +201,9 @@ uint64_t
 rapidhashv1(const void *ptr, size_t len)
 {
 	static const uint64_t secret[] = {
-		0x2d358dccaa6c78a5ull,
-		0x8bb84b93962eacc9ull,
-		0x4b33a62ed433d4a3ull,
+		UINT64_C(0x2d358dccaa6c78a5),
+		UINT64_C(0x8bb84b93962eacc9),
+		UINT64_C(0x4b33a62ed433d4a3),
 	};
 	uint64_t seed[3];
 	const unsigned char *pos, *end;
@@ -209,7 +211,7 @@ rapidhashv1(const void *ptr, size_t len)
 
 	pos = ptr;
 	end = pos + len;
-	seed[0] = 0xbdd89aa982704029ull;
+	seed[0] = UINT64_C(0xbdd89aa982704029);
 	seed[0] ^= mix(seed[0] ^ secret[0], secret[1]) ^ len;
 	if (len == 0) {
 		seed[1] = seed[2] = 0;

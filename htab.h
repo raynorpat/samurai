@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #include <stdint.h>  /* for uint64_t */
+#endif
 
 struct hashtablekey {
 	uint64_t hash;

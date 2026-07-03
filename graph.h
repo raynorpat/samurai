@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #include <stdint.h>  /* for uint64_t */
+#endif
 
 /* set in the tv_nsec field of a node's mtime */
 enum {

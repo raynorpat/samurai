@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #include <stdbool.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

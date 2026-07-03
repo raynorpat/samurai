@@ -42,3 +42,9 @@ void delevalstr(void *);
 void canonpath(struct string *);
 /* write a new file with the given name and contents */
 int writefile(const char *, struct string *);
+
+/* format a 64-bit value into buf without printf's %I64 (the NT4 CRT printf
+ * does not support it). buf must hold >= 21 bytes (i64dec) / >= 17 (u64hex).
+ * returns buf, so it can be passed inline to a %s argument. */
+char *i64dec(char *buf, int64_t v);
+char *u64hex(char *buf, uint64_t v);
