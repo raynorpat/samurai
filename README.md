@@ -17,6 +17,7 @@ It is feature-complete and supports most of the same options as ninja.
 
 ## Requirements
 
+### POSIX Systems
 samurai requires various POSIX.1-2008 interfaces.
 
 Scheduling jobs based on load average requires the non-standard
@@ -34,6 +35,19 @@ available. While it is a POSIX requirement to support this flag
 (even if it's a no-op), some operating systems don't. If you get
 an error about a missing `rt` library, you can build without it
 by clearing `LDLIBS`.
+
+### Windows
+The Windows build requires the MSVC toolchain (cl, link) with these
+environment variables configured:
+- `PATH` must include the MSVC bin directory (e.g., `C:\Program Files\Microsoft Visual Studio\2019\VC\Tools\MSVC\14.30.0\bin`)
+- `INCLUDE` must include the MSVC include directory
+- `LIB` must include the MSVC lib directory
+- `INCLUDE` must include `compat.h` for POSIX compatibility shims
+
+The Windows build uses `nmake -f Makefile.nmake`. This builds `samu.exe`
+with a Windows subprocess execution model, not fork/exec.
+
+The code should build with MSVC versions dating back to 2.0 (Visual Studio 2013) and Windows NT 3.5.
 
 ## Building
 
