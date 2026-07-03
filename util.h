@@ -1,3 +1,8 @@
+#include <stddef.h>
+#ifndef _WIN32
+#include <stdint.h>
+#endif
+
 struct buffer {
 	char *data;
 	size_t len, cap;

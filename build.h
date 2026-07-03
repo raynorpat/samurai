@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 struct node;
 
 struct buildoptions {

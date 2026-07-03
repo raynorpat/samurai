@@ -1,3 +1,6 @@
+#include <stddef.h>
+#include <stdio.h>
+
 enum token {
 	BUILD,
 	DEFAULT,

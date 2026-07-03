@@ -1,3 +1,4 @@
+#include <stddef.h>
 #ifndef _WIN32
 #include <stdint.h>  /* for uint64_t */
 #endif

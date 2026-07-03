@@ -1,4 +1,6 @@
+#include <stddef.h>
 #ifndef _WIN32
+#include <stdint.h>
 #include <sys/types.h>
 #endif
 
