@@ -6,7 +6,12 @@ PREFIX?=/usr/local
 BINDIR?=$(PREFIX)/bin
 MANDIR?=$(PREFIX)/share/man
 ALL_CFLAGS=$(CFLAGS) -std=c99 -Wall -Wextra -Wshadow -Wmissing-prototypes -Wpedantic -Wno-unused-parameter
+# librt carries clock_gettime/timer_* on Linux; on macOS they live in libc and
+# there is no librt, so linking -lrt fails. Default per-OS (overridable).
 LDLIBS?=-lrt
+ifeq ($(shell uname -s),Darwin)
+LDLIBS=
+endif
 OBJ=\
 	build.o\
 	deps.o\
