@@ -12,15 +12,20 @@ jobs:
           flags: LDLIBS=
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
     - name: make
       run: make ${{ matrix.flags }}
 
   build-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v1
-    - uses: ilammy/msvc-dev-cmd@v1
+    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+        repository: itsmattkc/msvc420
+        path: msvc420
     - name: nmake
       shell: cmd
-      run: nmake -f Makefile.nmake
+      run: |
+        call .\msvc420\bin\VCVARS32.BAT x86
+        nmake -f Makefile.nmake
