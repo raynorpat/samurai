@@ -37,8 +37,13 @@ by clearing `LDLIBS`.
 
 ## Building
 
-samurai can be built with `make`. `CFLAGS` and `LDLIBS` can be set
-in the environment, or straight on the command-line.
+On POSIX systems, samurai can be built with `make`. `CFLAGS` and
+`LDLIBS` can be set in the environment, or straight on the
+command-line.
+
+On Windows, samurai can be built with `nmake -f Makefile.nmake` from
+an MSVC command prompt with `PATH`, `INCLUDE`, and `LIB` configured.
+This builds `samu.exe` using `cl` and `link`.
 
 ## Differences from ninja
 
