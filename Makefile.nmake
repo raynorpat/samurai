@@ -5,7 +5,7 @@
 CC      = cl
 LINKER  = link
 CFLAGS  = -nologo -W3 -FIcompat.h
-LIBS    = libc.lib kernel32.lib int64.lib
+LIBS    = libc.lib kernel32.lib
 
 OBJ = build.obj deps.obj env.obj graph.obj htab.obj log.obj \
 	parse.obj samu.obj scan.obj tool.obj tree.obj util.obj os-windows.obj
